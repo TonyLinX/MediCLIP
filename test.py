@@ -9,7 +9,12 @@ import math
 import argparse
 import warnings
 from utils.misc_helper import *
-from datasets.dataset import ChexpertTestDataset,BusiTestDataset,BrainMRITestDataset
+from datasets.dataset import (
+    ChexpertTestDataset,
+    BusiTestDataset,
+    BrainMRITestDataset,
+    FabricTestDataset,
+)
 from torch.utils.data import DataLoader
 from models.MapMaker import MapMaker
 import pprint
@@ -131,16 +136,41 @@ def main(args):
                                             args=args.config,
                                             source=os.path.join(args.config.data_root,test_dataset_name),
                                             preprocess=preprocess)
+        elif test_dataset_name == 'fabric':
+
+            test_dataset = FabricTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
         else:
-            raise NotImplementedError("dataset must in ['chexpert','busi','brainmri'] ")
+            raise NotImplementedError("dataset must in ['chexpert','busi','brainmri','fabric'] ")
 
         test_dataloader = DataLoader(test_dataset, batch_size=args.config.batch_size,num_workers=2)
         results = validate(args,test_dataset_name,test_dataloader,model,necker,adapter,prompt_maker,map_maker)
 
-        if test_dataset_name!='busi':
-            print("{}, image auroc: {:.4f}".format(test_dataset_name, results["image-auroc"]))
+        if test_dataset_name == 'busi':
+            print(
+                "{}, image auroc: {:.4f}, pixel_auroc: {:.4f}".format(
+                    test_dataset_name,
+                    results["image-auroc"],
+                    results["pixel-auroc"],
+                )
+            )
+        elif test_dataset_name == 'fabric':
+            print(
+                "{}, image auroc: {:.4f}, segmentation_f1: {:.4f}".format(
+                    test_dataset_name,
+                    results["image-auroc"],
+                    results["segmentation-f1"],
+                )
+            )
         else:
-            print("{}, image auroc: {:.4f}, pixel_auroc: {:.4f}".format(test_dataset_name, results["image-auroc"],results['pixel-auroc']))
+            print(
+                "{}, image auroc: {:.4f}".format(
+                    test_dataset_name,
+                    results["image-auroc"],
+                )
+            )
 
 
 def validate(args, dataset_name, test_dataloader, clip_model, necker, adapter, prompt_maker, map_maker):
@@ -173,20 +203,20 @@ def validate(args, dataset_name, test_dataloader, clip_model, necker, adapter, p
         image_preds.extend(anomaly_score.cpu().numpy().tolist())
         image_gts.extend(input['is_anomaly'].cpu().numpy().tolist())
 
-        if dataset_name=='busi':
+        if dataset_name in ['busi', 'fabric']:
             pixel_gts.append(input['mask'].cpu().numpy())
 
     pixel_preds_np = [pixel_pred.cpu().numpy() for pixel_pred in pixel_preds]
     pixel_preds = normalization(torch.cat(pixel_preds,dim=0), args.config.image_size)
 
-    if dataset_name == 'busi':
+    if dataset_name in ['busi', 'fabric']:
         pixel_gts = np.concatenate(pixel_gts,axis=0)
 
     save_images_root = os.path.join(args.vis_save_root,"{}".format(dataset_name))
     os.makedirs(save_images_root,exist_ok=True)
 
-    if dataset_name=='busi':
-         iter= tqdm(
+    if dataset_name in ['busi', 'fabric']:
+        iter= tqdm(
                 zip(image_paths, image_gts, pixel_preds, pixel_gts),
                 total=len(image_paths),
                 desc="Generating Segmentation Images...",
@@ -201,7 +231,7 @@ def validate(args, dataset_name, test_dataloader, clip_model, necker, adapter, p
         )
 
     for i, data in enumerate(iter):
-        if dataset_name=='busi':
+        if dataset_name in ['busi', 'fabric']:
             image_path, image_gt, pixel_pred, pixel_gt = data
         else:
             image_path, image_gt, pixel_pred = data
@@ -218,7 +248,7 @@ def validate(args, dataset_name, test_dataloader, clip_model, necker, adapter, p
 
         merge = [image,heat]
 
-        if dataset_name == 'busi':
+        if dataset_name in ['busi', 'fabric']:
             pixel_gt = np.repeat(np.expand_dims(pixel_gt,axis=-1),3,axis=-1)
             merge.append(pixel_gt*255)
 
@@ -227,6 +257,8 @@ def validate(args, dataset_name, test_dataloader, clip_model, necker, adapter, p
     metric = compute_imagewise_metrics(image_preds,image_gts)
     if dataset_name == 'busi':
         metric.update(compute_pixelwise_metrics(pixel_preds_np, pixel_gts))
+    elif dataset_name == 'fabric':
+        metric.update(compute_segmentation_f1(pixel_preds_np, pixel_gts))
 
     return metric
 
