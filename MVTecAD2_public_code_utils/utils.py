@@ -1,6 +1,17 @@
 # Copyright (C) 2025 MVTec Software GmbH
 # SPDX-License-Identifier: CC-BY-NC-4.0
 
+"""
+這份 utility 其實就是一個嚴格的資料結構與格式 validator，確保你的資料長得完全和官方要求一樣。大部分 function 其實都圍繞幾件事情：
+
+檢查資料夾與檔名數量、名稱、結構
+
+檢查圖片內容格式（像是 shape、dtype、pixel value）
+
+失敗就丟 exception，提示你要怎麼改
+
+成功之後自動壓縮成 tar.gz 方便上傳
+"""
 import logging
 import os
 import tarfile
@@ -35,7 +46,7 @@ OBJECT_FILE_COUNTER = {
 MVTEC_AD_2_OBJECTS = set(OBJECT_FILE_COUNTER.keys())
 
 TEST_SET_DIRECTORIES = {'test_private', 'test_private_mixed'}
-
+# 目錄結構說明與檢查
 DIRECTORY_STRUCTURE = """
 submission_folder/
     |-- anomaly_images/
@@ -99,6 +110,17 @@ def compare_found_vs_required(
 
     Raises:
         SubmissionException: For missing/spurious directory content.
+        
+    ### (A) compare_found_vs_required
+    功能
+    檢查當前目錄是不是剛好只有該有的子資料夾/檔案，沒有多、沒有少。
+
+    少了會報錯，多了也會報錯。
+
+    細節
+    missing_dirs、redundant_dirs 會分別列出缺少和多出來的資料夾。
+
+    _print_mismatched_files 只會印前 4 個，太多就顯示 "…還有 X 個"。
     """
     found_files, found_dirs = set(), set()
 
@@ -180,6 +202,13 @@ def _check_anomaly_images(
 
     Returns:
         List[Path]: List of found image file paths.
+    ### (B) _check_anomaly_images
+    功能
+    對單一個類別的 single test set 資料夾進行檢查。
+
+    數量不對、檔名格式不符、附檔名不對都會報錯。
+
+    預設 regular（for test_private），mixed（for test_private_mixed）。
     """
     suffix = "regular" if parent_dir.name == "test_private" else "mixed"
     files = list(parent_dir.iterdir())
@@ -225,6 +254,10 @@ def check_anomaly_image_dir(
 
     Returns:
         List[Path]: List of Paths to anomaly images.
+        
+    ### (C) check_anomaly_image_dir
+    功能
+    針對總 anomaly_images 目錄，依序檢查每一個類別，每一個 test set，檔名、數量、結構。
     """
     anomaly_image_paths = []
     compare_found_vs_required(
@@ -254,6 +287,11 @@ def check_images(image_paths: List[Path], thresholded: bool) -> None:
         image_paths (List[Path]): List of file paths of (thresholded) anomaly
           images.
         thresholded (bool): Whether images are thresholded.
+    ### (D) check_images
+    功能
+    多執行緒（ThreadPool）平行檢查每張圖（加速！）
+
+    根據 thresholded 決定是檢查 .tiff（浮點 anomaly map）還是 .png（binary mask）。
     """
     checker_fn = (
         _check_thresholded_ad_images if thresholded else _check_ad_images

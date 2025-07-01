@@ -4,6 +4,9 @@ formatting errors. Run this script before uploading your submission to the
 evaluation server to avoid reductions in your evaluation budget due to minor
 mistakes. When all checks were successful, the submission directory is
 compressed.
+檢查完整性並檢查常見的格式錯誤。
+在將提交內容上傳到評估伺服器之前，請執行此腳本，以避免因小錯誤而導致評估預算減少。
+所有檢查均成功後，提交目錄將被壓縮。
 """
 
 # Copyright (C) 2025 MVTec Software GmbH
@@ -23,6 +26,7 @@ from utils import (
 )
 
 
+#主要檢查流程
 def check_submission(submission_file_path: str) -> None:
     """
     Checks the structure and content of the submission directory.
