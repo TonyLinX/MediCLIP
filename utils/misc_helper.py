@@ -9,7 +9,7 @@ from collections.abc import Mapping
 import shutil
 
 from sklearn import metrics
-
+from sklearn.metrics import f1_score
 
 def map_func(storage, location):
     return storage.cuda()
@@ -130,3 +130,39 @@ def compute_pixelwise_metrics(
     )
 
     return {"pixel-auroc": pixel_auroc}
+
+def compute_segmentation_f1(
+    pixel_prediction,
+    pixel_ground_truth_labels,
+    threshold=0.5,
+    ignore_value=None,          # 允許指定被忽略的 label，如 255 或 -1
+    return_per_image=False,
+    zero_division=0
+):
+    """計算 pixel-level segmentation F1 (Dice)。"""
+    # 1. to ndarray 並 flatten
+    preds  = [np.asarray(p).flatten() for p in pixel_prediction]
+    gts    = [np.asarray(g).flatten() for g in pixel_ground_truth_labels]
+
+    # 2. 可選過濾 ignore label
+    if ignore_value is not None:
+        preds_filtered, gts_filtered = [], []
+        for p, g in zip(preds, gts):
+            keep = g != ignore_value
+            preds_filtered.append(p[keep])
+            gts_filtered.append(g[keep])
+        preds, gts = preds_filtered, gts_filtered
+
+    # 3. 閾值化 + binarise GT
+    preds_bin = [(p >= threshold).astype(np.uint8) for p in preds]
+    gts_bin   = [(g > 0).astype(np.uint8) for g in gts]
+
+    # 4. per-image or global
+    if return_per_image:
+        f1s = [f1_score(g, p, zero_division=zero_division) for g, p in zip(gts_bin, preds_bin)]
+        return {"segmentation-f1": np.mean(f1s), "segmentation-f1-per-image": f1s}
+    else:
+        f1 = f1_score(np.concatenate(gts_bin),
+                      np.concatenate(preds_bin),
+                      zero_division=zero_division)
+        return {"segmentation-f1": f1}

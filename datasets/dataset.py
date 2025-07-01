@@ -246,3 +246,124 @@ class BusiTestDataset(torch.utils.data.Dataset):
                 meta = json.loads(line)
                 data_to_iterate.append(meta)
         return data_to_iterate
+
+# class FabricTestDataset(torch.utils.data.Dataset):
+
+#     def __init__(
+#         self,
+#         args,
+#         source,
+#         preprocess,
+#         **kwargs,
+#     ):
+
+#         super().__init__()
+#         self.args = args
+#         self.source = source
+#         self.transform_img = preprocess
+#         self.data_to_iterate = self.get_image_data()
+
+
+#     def __getitem__(self, idx):
+#         info = self.data_to_iterate[idx]
+#         image_path = os.path.join(self.source,'images',info['filename'])
+#         image = PIL.Image.open(image_path).convert("RGB").resize((self.args.image_size,self.args.image_size),PIL.Image.Resampling.BILINEAR)
+        
+#         if info.get("mask", None):
+#             mask = os.path.join(self.source,'images',info['mask'])
+#             mask = PIL.Image.open(mask).convert("L").resize((self.args.image_size,self.args.image_size),PIL.Image.Resampling.NEAREST)
+#             mask = np.array(mask).astype(np.float)/255.0
+#             mask [mask!=0.0] = 1.0
+#         else:
+#             mask = np.zeros((self.args.image_size,self.args.image_size)).astype(np.float)
+
+#         image = self.transform_img(image)
+#         mask = torch.from_numpy(mask)
+
+#         return {
+#             "image": image,
+#             "mask": mask,
+#             "classname": info['clsname'],
+#             "is_anomaly": info['label'],
+#             "image_path": image_path,
+#         }
+
+#     def __len__(self):
+#         return len(self.data_to_iterate)
+
+#     def get_image_data(self):
+#         data_to_iterate = []
+#         with open(os.path.join(self.source,'samples',"test.json"), "r") as f_r:
+#             for line in f_r:
+#                 meta = json.loads(line)
+#                 data_to_iterate.append(meta)
+#         return data_to_iterate
+
+import os
+import json
+import torch
+import numpy as np
+import PIL.Image
+
+class FabricTestDataset(torch.utils.data.Dataset):
+    def __init__(self, args, source, preprocess, **kwargs):
+        super().__init__()
+        self.args = args
+        self.source = source  # e.g., data/fabric
+        self.transform_img = preprocess
+        self.data_to_iterate = self.get_image_data()
+
+    def __getitem__(self, idx):
+        info = self.data_to_iterate[idx]
+
+        # ========== 讀圖 ==========
+        image_path = os.path.join(self.source, 'images', info['filename'])
+        image = PIL.Image.open(image_path).convert("RGB").resize(
+            (self.args.image_size, self.args.image_size), PIL.Image.Resampling.BILINEAR
+        )
+
+        # ========== 讀 mask ==========
+        if info.get("mask", None):
+            mask_path = os.path.join(self.source, 'images', info['mask'])
+
+            # DEBUG：只印前 5 筆的 mask path 與內容
+            if idx < 5:
+                print(f"[DEBUG] idx {idx} | mask path: {mask_path}")
+                if os.path.exists(mask_path):
+                    debug_mask = PIL.Image.open(mask_path).convert("L")
+                    debug_mask_np = np.array(debug_mask)
+                    print(f"[DEBUG]    mask shape: {debug_mask_np.shape}, unique: {np.unique(debug_mask_np)}")
+                else:
+                    print(f"[WARNING] mask not found: {mask_path}")
+
+            # 正常流程
+            mask = PIL.Image.open(mask_path).convert("L").resize(
+                (self.args.image_size, self.args.image_size), PIL.Image.Resampling.NEAREST
+            )
+            mask = np.array(mask).astype(np.float32) / 255.0
+            mask[mask != 0.0] = 1.0
+        else:
+            mask = np.zeros((self.args.image_size, self.args.image_size), dtype=np.float32)
+
+        image = self.transform_img(image)
+        mask = torch.from_numpy(mask)
+
+        return {
+            "image": image,
+            "mask": mask,
+            "classname": info['clsname'],
+            "is_anomaly": info['label'],
+            "image_path": image_path,
+        }
+
+    def __len__(self):
+        return len(self.data_to_iterate)
+
+    def get_image_data(self):
+        data_to_iterate = []
+        json_path = os.path.join(self.source, 'samples', "test.json")
+        with open(json_path, "r") as f_r:
+            for line in f_r:
+                meta = json.loads(line)
+                data_to_iterate.append(meta)
+        return data_to_iterate

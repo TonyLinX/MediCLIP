@@ -14,7 +14,8 @@ from utils.losses import FocalLoss,BinaryDiceLoss
 from datasets.dataset import TrainDataset,\
                                 ChexpertTestDataset,\
                                 BusiTestDataset,\
-                                BrainMRITestDataset
+                                BrainMRITestDataset,\
+                                FabricTestDataset
 import pprint
 from tqdm import tqdm
 warnings.filterwarnings('ignore')
@@ -121,6 +122,12 @@ def main(args):
                                             args=args.config,
                                             source=os.path.join(args.config.data_root,test_dataset_name),
                                             preprocess=preprocess)
+        elif test_dataset_name == 'fabric':
+            
+            test_dataset = FabricTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
         else:
             raise NotImplementedError("dataset must in ['chexpert','busi','brainmri'] ")
 
@@ -160,49 +167,86 @@ def main(args):
 
             for test_dataset_name in results:
                 if best_record[test_dataset_name] is None:
-                    if test_dataset_name=='busi':
+                    if test_dataset_name in ['busi']:
                         best_record[test_dataset_name] = [results[test_dataset_name]["image-auroc"],
                                                           results[test_dataset_name]['pixel-auroc']]
+                    elif test_dataset_name in ['fabric']:
+                        best_record[test_dataset_name] = [
+                            results[test_dataset_name]['segmentation-f1'],   # 0 ──➤ 用來挑 best
+                            results[test_dataset_name]['image-auroc']        # 1
+                        ]
                     else:
                         best_record[test_dataset_name] = [results[test_dataset_name]["image-auroc"]]
 
                     save_flag=True
                 else:
-                    if np.mean([results[test_dataset_name][key] for key in results[test_dataset_name]]) > np.mean(best_record[test_dataset_name]):
-                        if test_dataset_name == 'busi':
-                            best_record[test_dataset_name] = [results[test_dataset_name]["image-auroc"],
-                                                              results[test_dataset_name]['pixel-auroc']]
-                        else:
-                            best_record[test_dataset_name] = [results[test_dataset_name]["image-auroc"]]
-                        save_flag=True
+                    if test_dataset_name == 'busi':
+                        curr_score = np.mean([
+                            results[test_dataset_name]['image-auroc'],
+                            results[test_dataset_name]['pixel-auroc']
+                        ])
+                        best_score = np.mean(best_record[test_dataset_name])
+                        if curr_score > best_score:
+                            best_record[test_dataset_name] = [
+                                results[test_dataset_name]['image-auroc'],
+                                results[test_dataset_name]['pixel-auroc']
+                            ]
+                            save_flag = True
+
+                    elif test_dataset_name == 'fabric':
+                        curr_score = results[test_dataset_name]['segmentation-f1']
+                        best_score = best_record[test_dataset_name][0]
+                        if curr_score > best_score:
+                            best_record[test_dataset_name] = [
+                                results[test_dataset_name]['segmentation-f1'],
+                                results[test_dataset_name]['image-auroc']
+                            ]
+                            save_flag = True
+
+                    else:  # 其他資料集
+                        curr_score = results[test_dataset_name]['image-auroc']
+                        best_score = best_record[test_dataset_name][0]
+                        if curr_score > best_score:
+                            best_record[test_dataset_name] = [curr_score]
+                            save_flag = True
 
 
-                if test_dataset_name=='busi':
-                    logger.info("({}): Epoch: {}, image auroc: {:.4f}, pixel_auroc: {:.4f},".format(test_dataset_name,
-                                                                                                    epoch+1,
-                                                                                                    results[test_dataset_name]["image-auroc"],
-                                                                                                    results[test_dataset_name]['pixel-auroc']))
+                if test_dataset_name == 'busi':
+                    logger.info(
+                        f"({test_dataset_name}): Epoch: {epoch+1}, "
+                        f"image auroc: {results[test_dataset_name]['image-auroc']:.4f}, "
+                        f"pixel_auroc: {results[test_dataset_name]['pixel-auroc']:.4f},"
+                    )
+                elif test_dataset_name in ['fabric']:
+                    logger.info(
+                        f"({test_dataset_name}): Epoch: {epoch+1}, "
+                        f"image auroc: {results[test_dataset_name]['image-auroc']:.4f}, "
+                        f"segmentation-f1: {results[test_dataset_name]['segmentation-f1']:.4f},"
+                    )
                 else:
-                    logger.info("({}): Epoch: {}, image auroc: {:.4f},".format(
-                        test_dataset_name,
-                        epoch+1,
-                        results[test_dataset_name]["image-auroc"],
-                    ))
+                    logger.info(
+                        f"({test_dataset_name}): Epoch: {epoch+1}, "
+                        f"image auroc: {results[test_dataset_name]['image-auroc']:.4f},"
+                    )
 
             for test_dataset_name in results:
                 if test_dataset_name == 'busi':
                     logger.info(
-                        "({} best): image auroc: {:.4f}, pixel auroc: {:.4f},".format(
-                            test_dataset_name,
-                            best_record[test_dataset_name][0],
-                            best_record[test_dataset_name][1],
-                        ))
+                        f"({test_dataset_name} best): "
+                        f"image auroc: {best_record[test_dataset_name][0]:.4f}, "
+                        f"pixel auroc: {best_record[test_dataset_name][1]:.4f},"
+                    )
+                elif test_dataset_name in ['fabric']:
+                    logger.info(
+                        f"({test_dataset_name} best): "
+                        f"image auroc: {best_record[test_dataset_name][1]:.4f},"
+                        f"segmentation-f1: {best_record[test_dataset_name][0]:.4f}, "
+                    )
                 else:
                     logger.info(
-                        "({} best): image auroc: {:.4f},".format(
-                            test_dataset_name,
-                            best_record[test_dataset_name][0],
-                        ))
+                        f"({test_dataset_name} best): "
+                        f"image auroc: {best_record[test_dataset_name][0]:.4f},"
+                    )
 
             if save_flag:
                 logger.info("save checkpoints in epoch: {}".format(epoch+1))
@@ -316,8 +360,10 @@ def validate(args, test_dataloaders, epoch, clip_model, necker, adapter, prompt_
 
         metric = compute_imagewise_metrics(image_scores,image_labels)
 
-        if test_dataset_name=='busi':
+        if test_dataset_name in ['busi']:
             metric.update(compute_pixelwise_metrics(anomaly_maps,anomaly_gts))
+        elif test_dataset_name in ['fabric']:
+            metric.update(compute_segmentation_f1(anomaly_maps,anomaly_gts))
 
         results[test_dataset_name] = metric
     return results
