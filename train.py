@@ -15,7 +15,14 @@ from datasets.dataset import TrainDataset,\
                                 ChexpertTestDataset,\
                                 BusiTestDataset,\
                                 BrainMRITestDataset,\
-                                FabricTestDataset
+                                FabricTestDataset,\
+                                CanTestDataset,\
+                                FruitJellyTestDataset,\
+                                RiceTestDataset,\
+                                SheetMetalTestDataset,\
+                                VialTestDataset,\
+                                WallPlugsTestDataset,\
+                                WalnutsTestDataset 
 import pprint
 from tqdm import tqdm
 warnings.filterwarnings('ignore')
@@ -128,6 +135,50 @@ def main(args):
                                             args=args.config,
                                             source=os.path.join(args.config.data_root,test_dataset_name),
                                             preprocess=preprocess)
+        elif test_dataset_name == 'can':
+            
+            test_dataset = CanTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'fruit_jelly':
+            
+            test_dataset = FruitJellyTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'rice':
+            
+            test_dataset = RiceTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'sheet_metal':
+            
+            test_dataset = SheetMetalTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'vial':
+            
+            test_dataset = VialTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'wallplugs':
+            
+            test_dataset = WallPlugsTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)
+        elif test_dataset_name == 'walnuts':
+            
+            test_dataset = WalnutsTestDataset(
+                                            args=args.config,
+                                            source=os.path.join(args.config.data_root,test_dataset_name),
+                                            preprocess=preprocess)    
+        
+        
         else:
             raise NotImplementedError("dataset must in ['chexpert','busi','brainmri'] ")
 
@@ -170,7 +221,7 @@ def main(args):
                     if test_dataset_name in ['busi']:
                         best_record[test_dataset_name] = [results[test_dataset_name]["image-auroc"],
                                                           results[test_dataset_name]['pixel-auroc']]
-                    elif test_dataset_name in ['fabric']:
+                    elif test_dataset_name in ['fabric', 'can','fruit_jelly','rice','sheet_metal','vial','wallplugs','walnuts']:
                         best_record[test_dataset_name] = [
                             results[test_dataset_name]['segmentation-f1'],   # 0 ──➤ 用來挑 best
                             results[test_dataset_name]['image-auroc']        # 1
@@ -193,7 +244,7 @@ def main(args):
                             ]
                             save_flag = True
 
-                    elif test_dataset_name == 'fabric':
+                    elif test_dataset_name in ['fabric', 'can','fruit_jelly','rice','sheet_metal','vial','wallplugs','walnuts']:
                         curr_score = results[test_dataset_name]['segmentation-f1']
                         best_score = best_record[test_dataset_name][0]
                         if curr_score > best_score:
@@ -217,7 +268,7 @@ def main(args):
                         f"image auroc: {results[test_dataset_name]['image-auroc']:.4f}, "
                         f"pixel_auroc: {results[test_dataset_name]['pixel-auroc']:.4f},"
                     )
-                elif test_dataset_name in ['fabric']:
+                elif test_dataset_name in ['fabric', 'can','fruit_jelly','rice','sheet_metal','vial','wallplugs','walnuts']:
                     logger.info(
                         f"({test_dataset_name}): Epoch: {epoch+1}, "
                         f"image auroc: {results[test_dataset_name]['image-auroc']:.4f}, "
@@ -236,7 +287,7 @@ def main(args):
                         f"image auroc: {best_record[test_dataset_name][0]:.4f}, "
                         f"pixel auroc: {best_record[test_dataset_name][1]:.4f},"
                     )
-                elif test_dataset_name in ['fabric']:
+                elif test_dataset_name in ['fabric', 'can','fruit_jelly','rice','sheet_metal','vial','wallplugs','walnuts']:
                     logger.info(
                         f"({test_dataset_name} best): "
                         f"image auroc: {best_record[test_dataset_name][1]:.4f},"
@@ -362,7 +413,7 @@ def validate(args, test_dataloaders, epoch, clip_model, necker, adapter, prompt_
 
         if test_dataset_name in ['busi']:
             metric.update(compute_pixelwise_metrics(anomaly_maps,anomaly_gts))
-        elif test_dataset_name in ['fabric']:
+        elif test_dataset_name in ['fabric', 'can','fruit_jelly','rice','sheet_metal','vial','wallplugs','walnuts']:
             metric.update(compute_segmentation_f1(anomaly_maps,anomaly_gts))
 
         results[test_dataset_name] = metric

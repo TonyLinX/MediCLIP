@@ -7,7 +7,9 @@ import tifffile
 from easydict import EasyDict
 from tqdm import tqdm
 import open_clip
-
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 from models.Necker import Necker
 from models.Adapter import Adapter
 from models.MapMaker import MapMaker
@@ -58,9 +60,19 @@ def inference_on_split(
             anomaly_map = map_maker(vision_adapter_features, prompt_adapter_features)
             anomaly_map = anomaly_map[:, 1, :, :]
             for idx in range(images.size(0)):
+                img_path = batch["image_path"][idx]
+                with Image.open(img_path) as orig_img:
+                    h, w = orig_img.height, orig_img.width
+                resized_map = torch.nn.functional.interpolate(
+                    anomaly_map[idx].unsqueeze(0).unsqueeze(0),
+                    size=(h, w),
+                    mode="bilinear",
+                    align_corners=False,
+                )[0, 0]
+
                 out_path = os.path.join(output_dir, batch["rel_out_path_cont"][idx])
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                tifffile.imwrite(out_path, anomaly_map[idx].cpu().numpy().astype("float16"))
+                tifffile.imwrite(out_path, resized_map.cpu().numpy().astype("float16"))
 
 
 def main(args):
@@ -72,6 +84,13 @@ def main(args):
     model, preprocess, model_cfg = open_clip.create_model_and_transforms(
         args.config.model_name, args.config.image_size, device=device
     )
+    preprocess = transforms.Compose([
+        transforms.Resize(
+            (args.config.image_size, args.config.image_size),
+            interpolation=InterpolationMode.BICUBIC,
+        ),
+        *preprocess.transforms,
+    ])
     for p in model.parameters():
         p.requires_grad_(False)
     args.config.model_cfg = model_cfg

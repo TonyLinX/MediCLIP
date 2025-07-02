@@ -1,0 +1,60 @@
+version: v1.0.0
+random_seed: 100
+
+data_root: data
+train_dataset: wallplugs
+test_datasets: [wallplugs]
+
+epoch: 200
+batch_size: 8
+
+print_freq_step: 10 
+val_freq_epoch: 1
+
+image_size: 224
+model_name: ViT-L-14
+layers_out: [12,18,24]
+
+anomaly_tasks:
+  CutpasteTask: 0.25
+  GaussIntensityChangeTask: 0.25
+  SourceTask: 0.25
+  IdentityTask: 0.25
+
+
+prompt_maker: coop
+n_learnable_token: 8
+CSC: True
+class_token_positions: [end]
+
+save_root: results
+
+prompts:
+  normal: [
+    flawless wall plugs,
+    intact plastic anchors,
+    consistent size and shape,
+    clean and undamaged plugs,
+    uniformly molded wall plugs,
+    no missing or broken parts,
+    well-formed plastic components,
+    defect-free batch of wall plugs,
+    correctly sized and placed plugs,
+    smooth and unblemished surface
+  ]
+
+  abnormal: [
+    broken or cut wall plug,
+    missing part in wall plug,
+    scratch or damage on plug,
+    foreign object among wall plugs,
+    incorrect size of plastic anchor,
+    visible contamination or debris,
+    defective or incomplete wall plug,
+    cracked or deformed plug,
+    overlapping or misaligned plugs,
+    plug with irregular shape or defect
+  ]
+
+
+

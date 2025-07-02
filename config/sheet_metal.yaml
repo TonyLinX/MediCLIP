@@ -1,0 +1,58 @@
+version: v1.0.0
+random_seed: 100
+
+data_root: data
+train_dataset: sheet_metal
+test_datasets: [sheet_metal]
+
+epoch: 200
+batch_size: 8
+
+print_freq_step: 10 
+val_freq_epoch: 1
+
+image_size: 224
+model_name: ViT-L-14
+layers_out: [12,18,24]
+
+anomaly_tasks:
+  CutpasteTask: 0.25
+  GaussIntensityChangeTask: 0.25
+  SourceTask: 0.25
+  IdentityTask: 0.25
+
+
+prompt_maker: coop
+n_learnable_token: 8
+CSC: True
+class_token_positions: [end]
+
+save_root: results
+
+prompts:
+  normal: [
+    flawless sheet metal,
+    smooth metal surface,
+    intact metal sheet,
+    no visible defects,
+    clean and uniform finish,
+    undamaged metal piece,
+    consistent surface texture,
+    perfect metallic surface,
+    defect-free sheet metal,
+    well-processed metal sheet
+  ]
+
+  abnormal: [
+    scratch on metal surface,
+    cut or crack in sheet metal,
+    hole in metal sheet,
+    foreign object on metal,
+    damaged or torn metal,
+    irregular metal surface,
+    surface imperfection in sheet metal,
+    multiple defects on metal,
+    contamination on metal surface,
+    visible flaw in metal sheet
+  ]
+

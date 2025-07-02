@@ -4,7 +4,7 @@ truth maps.
 The PRO curve can also be integrated up to a constant integration limit.
 """
 import numpy as np
-from scipy.ndimage.measurements import label
+from scipy.ndimage import label
 
 
 def compute_pro(anomaly_maps, ground_truth_maps):

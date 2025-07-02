@@ -14,19 +14,42 @@ general usage:
 
 import os
 import time
-
+import argparse
+import math
 import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
+import yaml
+from models.Necker import Necker
+from models.Adapter import Adapter
+from models.MapMaker import MapMaker
+from models.CoOp import PromptMaker
+from easydict import EasyDict
+from utils.misc_helper import map_func, set_seed
+import open_clip
 
 USE_GPU = True
 BATCH_SIZE = 1
 WARMUP_ITERATIONS_GPU = 1000
 TIMING_ITERATIONS_GPU = 1000
 TIMING_ITERATIONS_CPU = 1000  # no warmup for CPU
-OUT_DIR = '/info/is/saved/here'  # INSERT
+OUT_DIR = 'metrics'  # INSERT
 
+@torch.no_grad()
+def make_vision_tokens_info(model, model_cfg, layers_out):
+    img = torch.ones(
+        (1, 3, model_cfg["vision_cfg"]["image_size"], model_cfg["vision_cfg"]["image_size"])
+    ).to(model.device)
+    _, tokens = model.encode_image(img, layers_out)
+    if len(tokens[0].shape) == 3:
+        model.token_size = [int(math.sqrt(t.shape[1] - 1)) for t in tokens]
+        model.token_c = [t.shape[-1] for t in tokens]
+    else:
+        model.token_size = [t.shape[2] for t in tokens]
+        model.token_c = [t.shape[1] for t in tokens]
+    model.embed_dim = model_cfg["embed_dim"]
+    
 
 class InfiniteDataset(torch.utils.data.IterableDataset):
 
@@ -43,8 +66,10 @@ class InfiniteDataset(torch.utils.data.IterableDataset):
             yield image_pt
 
 
-def main():
-
+def main(args):
+    with open(args.config_path) as f:
+        args.config = EasyDict(yaml.load(f, Loader=yaml.FullLoader))
+    set_seed(seed=args.config.get("random_seed", 0))
     device = torch.device('cpu')
     device_name = 'cpu'
     if USE_GPU:
@@ -75,7 +100,7 @@ def main():
         else TIMING_ITERATIONS_CPU
     )
 
-    for image_size in [(256, 256), (512, 512), (1024, 1224)]:
+    for image_size in [(224,224)]:
 
         img_height, img_width = image_size
         measurement_info['image_height'].append(img_height)
@@ -86,8 +111,26 @@ def main():
 
         # INSERT
         # create your model instance here
-        model = 'MODEL_CLASS'
-        model.to(device).eval()
+        model, preprocess, model_cfg = open_clip.create_model_and_transforms(
+            args.config.model_name, args.config.image_size, device=device
+        )
+        make_vision_tokens_info(model, model_cfg, args.config.layers_out)
+        necker = Necker(clip_model=model).to(device)
+        adapter = Adapter(clip_model=model, target=model_cfg["embed_dim"]).to(device)
+        prompt_maker = PromptMaker(
+            prompts=args.config.prompts,
+            clip_model=model,
+            n_ctx=args.config.n_learnable_token,
+            CSC=args.config.CSC,
+            class_token_position=args.config.class_token_positions,
+        ).to(device)
+        map_maker = MapMaker(image_size=args.config.image_size).to(device)
+    
+        ckpt = torch.load(args.checkpoint_path, map_location=map_func)
+        adapter.load_state_dict(ckpt["adapter_state_dict"])
+        prompt_maker.prompt_learner.load_state_dict(ckpt["prompt_state_dict"])
+        prompt_maker.prompt_learner.eval()
+        adapter.eval()
 
         dataset = InfiniteDataset(
             image_height=img_height,
@@ -114,8 +157,12 @@ def main():
                 # INSERT
                 # call your forward pass and ensure
                 # that in the end you have an anomaly image on the cpu
-                anomaly_image = model(input_tensor)
-                anomaly_image = anomaly_image.cpu()
+                _, image_tokens = model.encode_image(input_tensor, out_layers=args.config.layers_out)
+                image_features = necker(image_tokens)
+                vision_adapter_features = adapter(image_features)
+                prompt_adapter_features = prompt_maker(vision_adapter_features)
+                anomaly_map = map_maker(vision_adapter_features, prompt_adapter_features)
+                anomaly_image = anomaly_map[:, 1, :, :].cpu()
 
                 # END
                 # we stop the timing as soon as we have the result on the cpu
@@ -171,4 +218,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description="Test MediCLIP on MVTec AD 2")
+    parser.add_argument("--config_path", type=str, help="model config path")
+    parser.add_argument("--checkpoint_path", type=str, help="trained checkpoint path")
+    args = parser.parse_args()
+    torch.multiprocessing.set_start_method("spawn")
+    main(args)

@@ -3,7 +3,16 @@ data/busi
 data/can
 data/chexpert
 data/fabric
+data/fruit_jelly
+data/rice
+data/sheet_metal
+data/vial
+data/wallplugs
+data/walnuts
 data/mvtec_ad_2
 vis_results
-results/
+results
+metrics
+mvtec_results
 mvtec_ad_2
+*.tar.gz

@@ -79,9 +79,9 @@ def parse_dataset_files(object_name, dataset_base_dir, anomaly_maps_dir):
     prediction_filenames = []
 
     # Test images are located here.
-    test_dir = path.join(dataset_base_dir, object_name, 'test')
-    gt_base_dir = path.join(dataset_base_dir, object_name, 'ground_truth')
-    anomaly_maps_base_dir = path.join(anomaly_maps_dir, object_name, 'test')
+    test_dir = path.join(dataset_base_dir, object_name, 'test_public')
+    gt_base_dir = path.join(dataset_base_dir, object_name, 'test_public', 'ground_truth')
+    anomaly_maps_base_dir = path.join(anomaly_maps_dir, object_name, 'test_public')
 
     # List all ground truth and corresponding anomaly images.
     for subdir in listdir(str(test_dir)):
