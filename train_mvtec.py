@@ -179,8 +179,15 @@ def validate(args, dataloader, epoch, model, necker, adapter, prompt_maker, map_
             loss = torch.sum(torch.stack(loss))
             loss_meter.update(loss.item())
 
-            anomaly_maps.append(anomaly_map[:, 1, :, :].cpu().numpy())
-            anomaly_gts.append(gt_mask.cpu().numpy())
+            # Append each sample individually so that the PRO curve utility
+            # receives a list of 2D arrays. Otherwise a 3D array (B,H,W)
+            # would be passed and scipy.ndimage.label would raise
+            # "structure and input must have equal rank".
+            maps_np = anomaly_map[:, 1, :, :].cpu().numpy()
+            gts_np = gt_mask.cpu().numpy()
+            for m, g in zip(maps_np, gts_np):
+                anomaly_maps.append(m)
+                anomaly_gts.append(g)
 
     metrics = compute_segmentation_f1(anomaly_maps, anomaly_gts)
     metrics['au_pro'] = compute_au_pro(anomaly_maps, anomaly_gts, limit=0.05)
