@@ -17,7 +17,15 @@ from models.Adapter import Adapter
 from models.MapMaker import MapMaker
 from models.CoOp import PromptMaker
 from utils.losses import FocalLoss, BinaryDiceLoss
-from utils.misc_helper import AverageMeter, create_logger, get_current_time, compute_segmentation_f1, set_seed
+from utils.misc_helper import (
+    AverageMeter,
+    create_logger,
+    get_current_time,
+    compute_segmentation_f1,
+    set_seed,
+)
+from mvtec_ad_evaluation.pro_curve_util import compute_pro
+from mvtec_ad_evaluation.generic_util import trapezoid
 
 from medsyn.tasks import (
     CutPastePatchBlender,
@@ -48,7 +56,7 @@ class MVTecAD2SyntheticDataset(Dataset):
     def _load_anomaly_syn(self):
         tasks = []
         probs = []
-        for name, prob in self.args.anomaly_tasks.items():
+        for name, prob in self.args.config.anomaly_tasks.items():
             if name == 'CutpasteTask':
                 support_images = [self._read_image(p) for p in self.image_paths]
                 task = CutPastePatchBlender(support_images)
@@ -72,7 +80,7 @@ class MVTecAD2SyntheticDataset(Dataset):
         return tasks, probs
 
     def _read_image(self, path):
-        img = Image.open(path).resize((self.args.image_size, self.args.image_size), Image.Resampling.BILINEAR).convert('L')
+        img = Image.open(path).resize((self.args.config.image_size, self.args.config.image_size), Image.Resampling.BILINEAR).convert('L')
         return np.array(img).astype(np.uint8)
 
     def __len__(self):
@@ -139,7 +147,12 @@ def train_one_epoch(args, dataloader, optimizer, epoch, start_iter, logger, mode
                     loss=loss_meter,
                 )
             )
-
+            
+def compute_au_pro(anomaly_maps, anomaly_gts, limit=0.05):
+    fprs, pros = compute_pro(anomaly_maps, anomaly_gts)
+    au_pro = trapezoid(fprs, pros, x_max=limit)
+    au_pro /= limit
+    return au_pro
 
 def validate(args, dataloader, epoch, model, necker, adapter, prompt_maker, map_maker):
     adapter.eval()
@@ -170,6 +183,7 @@ def validate(args, dataloader, epoch, model, necker, adapter, prompt_maker, map_
             anomaly_gts.append(gt_mask.cpu().numpy())
 
     metrics = compute_segmentation_f1(anomaly_maps, anomaly_gts)
+    metrics['au_pro'] = compute_au_pro(anomaly_maps, anomaly_gts, limit=0.05)
     metrics['loss'] = loss_meter.avg
     return metrics
 
@@ -228,7 +242,7 @@ def main(args):
     logger.info('train data ({}) len {}'.format(obj, len(train_dataset)))
     logger.info('val data ({}) len {}'.format(obj, len(val_dataset)))
 
-    best_f1 = None
+    best_au_pro = None
     for epoch in range(args.config.epoch):
         last_iter = epoch * len(train_loader)
         train_one_epoch(args, train_loader, optimizer, epoch, last_iter, logger, model, necker, adapter, prompt_maker, map_maker)
@@ -236,11 +250,11 @@ def main(args):
         if (epoch + 1) % args.config.val_freq_epoch == 0:
             results = validate(args, val_loader, epoch, model, necker, adapter, prompt_maker, map_maker)
             logger.info(
-                f"Epoch {epoch+1}: val loss {results['loss']:.4f}, segmentation-f1 {results['segmentation-f1']:.4f}"
+                f"Epoch {epoch+1}: val loss {results['loss']:.4f}, au_pro {results['au_pro']:.4f}"
             )
             save_flag = False
-            if best_f1 is None or results['segmentation-f1'] > best_f1:
-                best_f1 = results['segmentation-f1']
+            if best_au_pro is None or results['au_pro'] > best_au_pro:
+                best_au_pro = results['au_pro']
                 save_flag = True
             if save_flag:
                 logger.info('save checkpoints in epoch: {}'.format(epoch + 1))
