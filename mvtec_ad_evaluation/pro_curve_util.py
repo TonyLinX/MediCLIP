@@ -140,7 +140,7 @@ def main():
 
     from generic_util import trapezoid, generate_toy_dataset
 
-    integration_limit = 0.3
+    integration_limit = 0.05
 
     # Generate a toy dataset.
     anomaly_maps, ground_truth_maps = generate_toy_dataset(
